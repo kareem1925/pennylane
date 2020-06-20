@@ -188,7 +188,7 @@ class KerasLayer(Layer):
     """
 
     def __init__(
-        self, qnode, weight_shapes: dict, output_dim, weight_specs: Optional[dict] = None, **kwargs
+        self, qnode, weight_shapes: dict, output_dim, include_bias = False, weight_specs: Optional[dict] = None, **kwargs
     ):
         if not CORRECT_TF_VERSION:
             raise ImportError(
@@ -206,6 +206,8 @@ class KerasLayer(Layer):
                     self.input_arg
                 )
             )
+        self.include_bias = include_bias
+        self.bias = None
 
         if self.input_arg in set(weight_shapes.keys()):
             raise ValueError(
@@ -255,6 +257,13 @@ class KerasLayer(Layer):
         for weight, size in self.weight_shapes.items():
             spec = self.weight_specs.get(weight, {})
             self.qnode_weights[weight] = self.add_weight(name=weight, shape=size, **spec)
+        
+        if self.include_bias:
+            self.bias = self.add_weight(name='bias',
+                                shape=(self.output_dim),
+                                initializer='zeros',
+                                trainable=True)
+
 
         super().build(input_shape)
 
@@ -284,7 +293,10 @@ class KerasLayer(Layer):
                         qnode = functools.partial(qnode, **{self.input_arg: x})
                     else:
                         qnode = functools.partial(qnode, x)
-            outputs.append(qnode())
+            if self.include_bias:
+                outputs.append(qnode()+self.bias)
+            else:
+                outputs.append(qnode())
 
         return tf.stack(outputs)
 
